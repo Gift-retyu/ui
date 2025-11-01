@@ -3,12 +3,45 @@
 import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
+import { ComponentTracer } from "@/lib/tracing/tracer"
 import { cn } from "@/lib/utils"
 
+interface TracingProps {
+  trace?: string
+  traceMetadata?: Record<string, unknown>
+}
+
 function Popover({
+  trace,
+  traceMetadata,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+}: React.ComponentProps<typeof PopoverPrimitive.Root> & TracingProps) {
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (trace) {
+        ComponentTracer.recordInteraction(
+          trace,
+          "toggle",
+          { ...traceMetadata, popoverState: open ? "open" : "close" } as Record<
+            string,
+            string | number | boolean
+          >,
+          200
+        )
+      }
+      onOpenChange?.(open)
+    },
+    [trace, traceMetadata, onOpenChange]
+  )
+
+  return (
+    <PopoverPrimitive.Root
+      data-slot="popover"
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function PopoverTrigger({

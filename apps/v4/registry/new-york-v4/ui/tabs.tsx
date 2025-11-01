@@ -3,16 +3,44 @@
 import * as React from "react"
 import * as TabsPrimitive from "@radix-ui/react-tabs"
 
+import { ComponentTracer } from "@/lib/tracing/tracer"
 import { cn } from "@/lib/utils"
+
+interface TracingProps {
+  trace?: string
+  traceMetadata?: Record<string, unknown>
+}
 
 function Tabs({
   className,
+  trace,
+  traceMetadata,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+}: React.ComponentProps<typeof TabsPrimitive.Root> & TracingProps) {
+  const handleValueChange = React.useCallback(
+    (value: string) => {
+      if (trace) {
+        ComponentTracer.recordInteraction(
+          trace,
+          "change",
+          { ...traceMetadata, tabValue: value } as Record<
+            string,
+            string | number | boolean
+          >,
+          200
+        )
+      }
+      onValueChange?.(value)
+    },
+    [trace, traceMetadata, onValueChange]
+  )
+
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
       className={cn("flex flex-col gap-2", className)}
+      onValueChange={handleValueChange}
       {...props}
     />
   )

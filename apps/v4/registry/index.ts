@@ -8,6 +8,7 @@ import { hooks } from "@/registry/registry-hooks"
 import { internal } from "@/registry/registry-internal"
 import { lib } from "@/registry/registry-lib"
 import { themes } from "@/registry/registry-themes"
+import { tracing } from "@/registry/registry-tracing"
 import { ui } from "@/registry/registry-ui"
 
 const DEPRECATED_ITEMS = [
@@ -48,6 +49,7 @@ export const registry = {
       ...lib,
       ...hooks,
       ...themes,
+      ...tracing,
       ...examples,
       ...internal,
     ]

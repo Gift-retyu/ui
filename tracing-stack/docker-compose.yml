@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://prometheus:9090
+      - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
+    ports:
+      - "16686:16686"
+      - "14251:14250"
+      - "4327:4317"
+      - "4328:4318"
+    networks:
+      - monitoring
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    configs:
+      - source: otel-collector-config
+        target: /etc/otel-collector-config.yaml
+    ports:
+      - "8889:8889"
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    configs:
+      - source: prometheus-config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"  # Changed from 4000 to avoid conflict with Next.js
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  grafana-storage:
+  prometheus-data:
+
+configs:
+  prometheus-config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['otel-collector:8889']
+
+  otel-collector-config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+      processors:
+        batch:
+          send_batch_size: 1000
+          timeout: 10s
+
+        filter/nextjs_assets:
+          spans:
+            exclude:
+              match_type: regexp
+              span_names:
+                - '^GET /_next/static/.*'
+                - '^middleware GET /_next/static/.*'
+
+        filter/api_routes:
+          spans:
+            exclude:
+              match_type: regexp
+              span_names:
+                - '^GET /api/.*'
+                - '^POST /api/.*'
+                - '^PUT /api/.*'
+                - '^DELETE /api/.*'
+                - '^PATCH /api/.*'
+
+        filter/non_search_query_params:
+          spans:
+            exclude:
+              match_type: regexp
+              span_names:
+                - '^GET /[^s][^?]*\?.*'    # Matches GET requests with query params that don't start with /s
+                - '^GET /s[^?]+\?.*'       # Matches GET requests that start with /s but have additional path segments
+
+        filter/dynamic_routes:
+          spans:
+            exclude:
+              match_type: regexp
+              span_names:
+                - '.*/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/.*)?$'
+                - '.*/[0-9]{6,}(/.*)?$'
+
+        filter/server_spans:
+          spans:
+            include:
+              match_type: strict
+              span_kinds: [SPAN_KIND_SERVER]
+
+      connectors:
+        spanmetrics:
+          namespace: span.metrics
+          dimensions:
+            - name: http.status_code
+              default: "0"
+            - name: span_kind
+          histogram:
+            explicit:
+              buckets: [100us, 1ms, 2ms, 6ms, 10ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+          dimensions_cache_size: 1000
+          aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+
+      exporters:
+        prometheus:
+          endpoint: "0.0.0.0:8889"
+        otlp:
+          endpoint: "jaeger:4317"
+          tls:
+            insecure: true
+
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [batch, filter/nextjs_assets]
+            exporters: [otlp, spanmetrics]
+          metrics/spanmetrics:
+            receivers: [spanmetrics]
+            exporters: [prometheus]
+          metrics:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [prometheus]
+
+        telemetry:
+          logs:
+            level: "info"

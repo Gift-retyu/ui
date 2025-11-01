@@ -6,10 +6,94 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+export interface SelectTraceProps {
+  /**
+   * Enable tracing for this select
+   * Pass a string to use as component name, or true to use default name
+   */
+  trace?: string | boolean
+
+  /**
+   * Additional metadata to include in traces
+   */
+  traceMetadata?: Record<string, string | number | boolean>
+}
+
 function Select({
+  trace,
+  traceMetadata,
+  onValueChange,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
+}: React.ComponentProps<typeof SelectPrimitive.Root> & SelectTraceProps) {
+  // Wrap onValueChange to add tracing
+  const handleValueChange = trace
+    ? (value: string) => {
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "Select"
+
+          import("@/lib/tracing/tracer").then(({ ComponentTracer }) => {
+            import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+              try {
+                ComponentTracer.recordInteraction(componentName, "select", {
+                  "component.type": "select",
+                  "component.value": value,
+                  "component.status": ComponentStatus.OK as any,
+                  ...traceMetadata,
+                })
+
+                onValueChange?.(value)
+              } catch (error) {
+                ComponentTracer.recordInteraction(componentName, "select", {
+                  "component.type": "select",
+                  "component.status": ComponentStatus.ERROR as any,
+                  "error.message":
+                    error instanceof Error ? error.message : "Unknown error",
+                  ...traceMetadata,
+                })
+                throw error
+              }
+            })
+          })
+        } else {
+          onValueChange?.(value)
+        }
+      }
+    : onValueChange
+
+  // Wrap onOpenChange to track dropdown open/close
+  const handleOpenChange = trace
+    ? (open: boolean) => {
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "Select"
+
+          import("@/lib/tracing/tracer").then(({ ComponentTracer }) => {
+            import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+              ComponentTracer.recordInteraction(
+                componentName,
+                open ? "focus" : "blur",
+                {
+                  "component.type": "select",
+                  "component.open": open,
+                  "component.status": ComponentStatus.OK as any,
+                  ...traceMetadata,
+                }
+              )
+            })
+          })
+        }
+        onOpenChange?.(open)
+      }
+    : onOpenChange
+
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      onValueChange={handleValueChange}
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function SelectGroup({

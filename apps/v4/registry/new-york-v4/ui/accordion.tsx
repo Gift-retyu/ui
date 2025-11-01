@@ -4,12 +4,46 @@ import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 import { ChevronDownIcon } from "lucide-react"
 
+import { ComponentTracer } from "@/lib/tracing/tracer"
 import { cn } from "@/lib/utils"
 
+interface TracingProps {
+  trace?: string
+  traceMetadata?: Record<string, unknown>
+}
+
 function Accordion({
+  trace,
+  traceMetadata,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Root>) {
-  return <AccordionPrimitive.Root data-slot="accordion" {...props} />
+}: React.ComponentProps<typeof AccordionPrimitive.Root> & TracingProps) {
+  const handleValueChange = React.useCallback(
+    (value: string | string[]) => {
+      if (trace) {
+        const valueStr = Array.isArray(value) ? value.join(",") : value
+        ComponentTracer.recordInteraction(
+          trace,
+          "toggle",
+          { ...traceMetadata, accordionValue: valueStr } as Record<
+            string,
+            string | number | boolean
+          >,
+          200
+        )
+      }
+      onValueChange?.(value as any)
+    },
+    [trace, traceMetadata, onValueChange]
+  )
+
+  return (
+    <AccordionPrimitive.Root
+      data-slot="accordion"
+      onValueChange={handleValueChange}
+      {...props}
+    />
+  )
 }
 
 function AccordionItem({

@@ -36,22 +36,92 @@ const buttonVariants = cva(
   }
 )
 
+export interface ButtonTraceProps {
+  /**
+   * Enable tracing for this button
+   * Pass a string to use as component name, or true to use default name
+   * Tracing only happens on the client side
+   */
+  trace?: string | boolean
+
+  /**
+   * Additional metadata to include in traces
+   */
+  traceMetadata?: Record<string, string | number | boolean>
+}
+
 function Button({
   className,
   variant,
   size,
   asChild = false,
+  trace,
+  traceMetadata,
+  onClick,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
-  }) {
+  } & ButtonTraceProps) {
   const Comp = asChild ? Slot : "button"
+
+  // Wrap onClick to add tracing - works both server and client
+  const handleClick = trace
+    ? (event: React.MouseEvent<HTMLButtonElement>) => {
+        // Only trace on client side
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "Button"
+
+          // Dynamically import tracer to avoid server-side execution
+          import("@/lib/tracing/tracer")
+            .then(({ ComponentTracer }) => {
+              import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+                let statusCode: number = ComponentStatus.OK
+                let errorMessage: string | undefined
+
+                try {
+                  // Call original onClick
+                  onClick?.(event)
+                } catch (error) {
+                  // Catch errors from user's onClick handler
+                  statusCode = ComponentStatus.ERROR
+                  errorMessage =
+                    error instanceof Error ? error.message : String(error)
+
+                  // Re-throw so it doesn't silently fail
+                  throw error
+                } finally {
+                  // Record trace with appropriate status
+                  ComponentTracer.recordInteraction(
+                    componentName,
+                    "click",
+                    {
+                      "component.type": "interaction",
+                      "component.variant": variant || "default",
+                      "component.size": size || "default",
+                      ...(errorMessage && { "error.message": errorMessage }),
+                      ...traceMetadata,
+                    },
+                    statusCode as any
+                  )
+                }
+              })
+            })
+            .catch(() => {
+              // Silently fail if tracing not available
+            })
+        } else {
+          // Server-side or no window, just call onClick
+          onClick?.(event)
+        }
+      }
+    : onClick
 
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      onClick={handleClick}
       {...props}
     />
   )

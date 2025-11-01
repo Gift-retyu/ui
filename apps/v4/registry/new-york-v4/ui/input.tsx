@@ -2,7 +2,78 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+export interface InputTraceProps {
+  /**
+   * Enable tracing for this input
+   * Pass a string to use as component name, or true to use default name
+   */
+  trace?: string | boolean
+
+  /**
+   * Additional metadata to include in traces
+   */
+  traceMetadata?: Record<string, string | number | boolean>
+}
+
+function Input({
+  className,
+  type,
+  trace,
+  traceMetadata,
+  onBlur,
+  onFocus,
+  ...props
+}: React.ComponentProps<"input"> & InputTraceProps) {
+  // Wrap onBlur to track field completion (most valuable data point)
+  const handleBlur = trace
+    ? (event: React.FocusEvent<HTMLInputElement>) => {
+        onBlur?.(event)
+
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "Input"
+          const hasValue = !!event.target.value
+          const valueLength = event.target.value.length
+          const inputType = type || "text"
+
+          import("@/lib/tracing/tracer").then(({ ComponentTracer }) => {
+            import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+              ComponentTracer.recordInteraction(componentName, "blur", {
+                "component.type": "input",
+                "component.input_type": inputType,
+                "component.has_value": hasValue,
+                "component.value_length": valueLength,
+                "component.status": ComponentStatus.OK as any,
+                ...traceMetadata,
+              })
+            })
+          })
+        }
+      }
+    : onBlur
+
+  // Wrap onFocus to track field entry
+  const handleFocus = trace
+    ? (event: React.FocusEvent<HTMLInputElement>) => {
+        onFocus?.(event)
+
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "Input"
+          const inputType = type || "text"
+
+          import("@/lib/tracing/tracer").then(({ ComponentTracer }) => {
+            import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+              ComponentTracer.recordInteraction(componentName, "focus", {
+                "component.type": "input",
+                "component.input_type": inputType,
+                "component.status": ComponentStatus.OK as any,
+                ...traceMetadata,
+              })
+            })
+          })
+        }
+      }
+    : onFocus
+
   return (
     <input
       type={type}
@@ -13,6 +84,8 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         className
       )}
+      onBlur={handleBlur}
+      onFocus={handleFocus}
       {...props}
     />
   )

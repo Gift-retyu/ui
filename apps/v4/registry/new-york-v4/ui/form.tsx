@@ -11,10 +11,81 @@ import {
   type ControllerProps,
   type FieldPath,
   type FieldValues,
+  type UseFormReturn,
 } from "react-hook-form"
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/registry/new-york-v4/ui/label"
+
+export interface TracedFormProps {
+  /**
+   * Enable tracing for this form
+   * Pass a string to use as component name, or true to use default name
+   */
+  trace?: string | boolean
+
+  /**
+   * Additional metadata to include in traces
+   */
+  traceMetadata?: Record<string, string | number | boolean>
+}
+
+// Create traced Form wrapper
+function TracedForm<TFieldValues extends FieldValues = FieldValues>({
+  trace,
+  traceMetadata,
+  onSubmit,
+  children,
+  className,
+  ...formMethods
+}: UseFormReturn<TFieldValues> &
+  TracedFormProps &
+  Omit<React.ComponentProps<"form">, "onSubmit"> & {
+    onSubmit?: (data: TFieldValues) => void | Promise<void>
+    className?: string
+  }) {
+  const handleSubmit =
+    trace && onSubmit
+      ? formMethods.handleSubmit(async (data) => {
+          if (typeof window !== "undefined") {
+            const componentName = typeof trace === "string" ? trace : "Form"
+
+            const { ComponentTracer } = await import("@/lib/tracing/tracer")
+            const { ComponentStatus } = await import("@/lib/tracing/types")
+
+            const operation = ComponentTracer.startOperation(
+              componentName,
+              "submit",
+              {
+                "component.type": "form",
+                "component.field_count": Object.keys(data).length,
+                ...traceMetadata,
+              }
+            )
+
+            try {
+              await onSubmit(data)
+              operation.end(ComponentStatus.OK as any)
+            } catch (error) {
+              operation.end(ComponentStatus.ERROR as any, error as Error)
+              throw error
+            }
+          } else {
+            await onSubmit(data)
+          }
+        })
+      : onSubmit
+        ? formMethods.handleSubmit(onSubmit)
+        : undefined
+
+  return (
+    <FormProvider {...formMethods}>
+      <form onSubmit={handleSubmit} className={className}>
+        {children}
+      </form>
+    </FormProvider>
+  )
+}
 
 const Form = FormProvider
 
@@ -158,6 +229,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
 export {
   useFormField,
   Form,
+  TracedForm,
   FormItem,
   FormLabel,
   FormControl,

@@ -6,14 +6,67 @@ import { CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+export interface RadioGroupTraceProps {
+  /**
+   * Enable tracing for this radio group
+   * Pass a string to use as component name, or true to use default name
+   */
+  trace?: string | boolean
+
+  /**
+   * Additional metadata to include in traces
+   */
+  traceMetadata?: Record<string, string | number | boolean>
+}
+
 function RadioGroup({
   className,
+  trace,
+  traceMetadata,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
+}: React.ComponentProps<typeof RadioGroupPrimitive.Root> &
+  RadioGroupTraceProps) {
+  // Wrap onValueChange to add tracing
+  const handleValueChange = trace
+    ? (value: string) => {
+        if (typeof window !== "undefined") {
+          const componentName = typeof trace === "string" ? trace : "RadioGroup"
+
+          import("@/lib/tracing/tracer").then(({ ComponentTracer }) => {
+            import("@/lib/tracing/types").then(({ ComponentStatus }) => {
+              try {
+                ComponentTracer.recordInteraction(componentName, "select", {
+                  "component.type": "radio-group",
+                  "component.value": value,
+                  "component.status": ComponentStatus.OK as any,
+                  ...traceMetadata,
+                })
+
+                onValueChange?.(value)
+              } catch (error) {
+                ComponentTracer.recordInteraction(componentName, "select", {
+                  "component.type": "radio-group",
+                  "component.status": ComponentStatus.ERROR as any,
+                  "error.message":
+                    error instanceof Error ? error.message : "Unknown error",
+                  ...traceMetadata,
+                })
+                throw error
+              }
+            })
+          })
+        } else {
+          onValueChange?.(value)
+        }
+      }
+    : onValueChange
+
   return (
     <RadioGroupPrimitive.Root
       data-slot="radio-group"
       className={cn("grid gap-3", className)}
+      onValueChange={handleValueChange}
       {...props}
     />
   )

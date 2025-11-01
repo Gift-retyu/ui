@@ -3882,6 +3882,36 @@ export const Index: Record<string, any> = {
     categories: undefined,
     meta: undefined,
   },
+  "tracing": {
+    name: "tracing",
+    description: "OpenTelemetry tracing for shadcn/ui components",
+    type: "registry:lib",
+    registryDependencies: undefined,
+    files: [{
+      path: "registry/new-york-v4/lib/tracing/tracer.ts",
+      type: "registry:lib",
+      target: ""
+    },{
+      path: "registry/new-york-v4/lib/tracing/client-instrumentation.ts",
+      type: "registry:lib",
+      target: ""
+    },{
+      path: "registry/new-york-v4/lib/tracing/types.ts",
+      type: "registry:lib",
+      target: ""
+    },{
+      path: "registry/new-york-v4/components/client-tracing-provider.tsx",
+      type: "registry:component",
+      target: ""
+    }],
+    component: React.lazy(async () => {
+      const mod = await import("@/registry/new-york-v4/lib/tracing/tracer.ts")
+      const exportName = Object.keys(mod).find(key => typeof mod[key] === 'function' || typeof mod[key] === 'object') || item.name
+      return { default: mod.default || mod[exportName] }
+    }),
+    categories: undefined,
+    meta: undefined,
+  },
   "accordion-demo": {
     name: "accordion-demo",
     description: "",

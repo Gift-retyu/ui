@@ -4,12 +4,45 @@ import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
+import { ComponentTracer } from "@/lib/tracing/tracer"
 import { cn } from "@/lib/utils"
 
+interface TracingProps {
+  trace?: string
+  traceMetadata?: Record<string, unknown>
+}
+
 function Dialog({
+  trace,
+  traceMetadata,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+}: React.ComponentProps<typeof DialogPrimitive.Root> & TracingProps) {
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (trace) {
+        ComponentTracer.recordInteraction(
+          trace,
+          "toggle",
+          { ...traceMetadata, dialogState: open ? "open" : "close" } as Record<
+            string,
+            string | number | boolean
+          >,
+          200
+        )
+      }
+      onOpenChange?.(open)
+    },
+    [trace, traceMetadata, onOpenChange]
+  )
+
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({
