@@ -11,7 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/registry/new-york-v4/ui/sonner"
 
 import "@/styles/globals.css"
-
+//be
 export const metadata: Metadata = {
   title: {
     default: siteConfig.name,
